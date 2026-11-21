@@ -3,17 +3,17 @@
 -- Lithium
 -- Minecraft Performance Optimization Mod
 -- Zeus API
--- Version: 0.1.1
 -- ============================================
 
 -- name: Lithium
 -- version: 0.1.1
--- description: Minecraft performance optimization toolkit
--- author: Lithium Team
+-- description: A lightweight Minecraft performance optimization mod for Eaglercraft, featuring FPS monitoring, optimized client settings, performance presets, and a customizable HUD.
+-- author: UserArham
 
 local Lithium = {
     NAME = "Lithium",
     VERSION = "0.1.1",
+    DESCRIPTION = "A lightweight Minecraft performance optimization mod for Eaglercraft, featuring FPS monitoring, optimized client settings, performance presets, and a customizable HUD.",
 
     enabled = true,
     visible = true,
@@ -122,6 +122,7 @@ local function updateFPS()
     local fps = getFPS()
 
     Lithium.fps.current = fps
+
     Lithium.stats.frames =
         Lithium.stats.frames + 1
 
@@ -225,12 +226,15 @@ local function drawHUD(ctx)
         COLORS.gray
     )
 
-    ctx:text(
-        "FPS: " .. formatNumber(Lithium.fps.current),
-        x + 7,
-        y + 20,
-        getFPSColor(Lithium.fps.current)
-    )
+    if Lithium.config.showFPS then
+        ctx:text(
+            "FPS: " ..
+            formatNumber(Lithium.fps.current),
+            x + 7,
+            y + 20,
+            getFPSColor(Lithium.fps.current)
+        )
+    end
 
     if Lithium.config.compact then
         return
@@ -478,7 +482,7 @@ function Lithium.report()
 end
 
 -- ============================================
--- COMMAND REGISTRATION
+-- COMMANDS
 -- ============================================
 
 commands.register(
@@ -657,11 +661,15 @@ end
 -- ============================================
 
 chat.print(
-    "§b[Lithium] §aLithium 0.1.1 loaded!"
+    "b[Lithium] aLithium 0.1.1 loaded!"
 )
 
 chat.print(
-    "§7Type /lithium help for commands."
+    "7" .. Lithium.DESCRIPTION
+)
+
+chat.print(
+    "7Type /lithium help for commands."
 )
 
 mod.log(
