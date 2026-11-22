@@ -1,683 +1,1026 @@
 
--- ============================================
--- Lithium
--- Minecraft Performance Optimization Mod
--- Zeus API
--- ============================================
-
 -- name: Lithium
--- version: 0.1.1
--- description: A lightweight Minecraft performance optimization mod for Eaglercraft, featuring FPS monitoring, optimized client settings, performance presets, and a customizable HUD.
+-- id: lithium
+-- version: 0.1.2
 -- author: UserArham
+-- description: Lightweight performance monitoring and optimization for Eaglercraft
 
-local Lithium = {
-    NAME = "Lithium",
-    VERSION = "0.1.1",
-    DESCRIPTION = "A lightweight Minecraft performance optimization mod for Eaglercraft, featuring FPS monitoring, optimized client settings, performance presets, and a customizable HUD.",
+--------------------------------------------------
+-- LITHIUM 0.1.2
+--------------------------------------------------
 
-    enabled = true,
-    visible = true,
+local MOD_NAME = "Lithium"
+local MOD_VERSION = "0.1.2"
 
-    startTime = timer.time(),
+--------------------------------------------------
+-- SAFE HELPERS
+--------------------------------------------------
 
-    fps = {
-        current = 0,
-        minimum = 9999,
-        maximum = 0,
-        average = 0,
-        samples = {},
-        sampleCount = 0
-    },
-
-    stats = {
-        frames = 0,
-        updates = 0,
-        sessionTime = 0
-    },
-
-    config = {
-        hud = true,
-        showFPS = true,
-        showAverage = true,
-        showMinimum = true,
-        showMaximum = true,
-        showSession = true,
-        compact = false,
-        background = true,
-        color = "#55FF55",
-        x = 8,
-        y = 8,
-        renderDistance = 8,
-        autoOptimize = false
-    }
-}
-
--- ============================================
--- COLORS
--- ============================================
-
-local COLORS = {
-    background = "#15191F",
-    border = "#343C48",
-    title = "#A5F3FC",
-    green = "#55FF55",
-    yellow = "#FFFF55",
-    red = "#FF5555",
-    white = "#FFFFFF",
-    gray = "#A0AAB8",
-    cyan = "#55FFFF"
-}
-
--- ============================================
--- SAFE EXECUTION
--- ============================================
-
-local function safeCall(fn, fallback)
-    local ok, result = pcall(fn)
-
-    if ok then
-        return result
+local function safeString(value, fallback)
+    if value == nil then
+        return fallback or "Unknown"
     end
 
-    return fallback
+    return tostring(value)
+end
+
+local function safeNumber(value, fallback)
+    local number = tonumber(value)
+
+    if number == nil then
+        return fallback or 0
+    end
+
+    return number
+end
+
+local function printMessage(message)
+    pcall(function()
+        chat.print("[Lithium] " .. safeString(message, ""))
+    end)
+end
+
+local function inWorld()
+    local result = false
+
+    pcall(function()
+        result = game.inWorld()
+    end)
+
+    return result == true
 end
 
 local function getFPS()
-    return safeCall(function()
-        return game.fps()
-    end, 0)
+    local fps = 0
+
+    pcall(function()
+        fps = safeNumber(game.fps(), 0)
+    end)
+
+    return math.max(0, math.floor(fps))
 end
 
-local function getTime()
-    return timer.time()
-end
-
-local function formatNumber(number)
-    return tostring(math.floor(number or 0))
-end
-
--- ============================================
--- FPS COLOR
--- ============================================
-
-local function getFPSColor(fps)
-    if fps >= 120 then
-        return COLORS.green
-    elseif fps >= 60 then
-        return COLORS.yellow
-    else
-        return COLORS.red
-    end
-end
-
--- ============================================
--- FPS TRACKING
--- ============================================
-
-local function updateFPS()
-    if not Lithium.enabled then
-        return
-    end
-
-    local fps = getFPS()
-
-    Lithium.fps.current = fps
-
-    Lithium.stats.frames =
-        Lithium.stats.frames + 1
-
-    if fps > 0 then
-        Lithium.fps.minimum = math.min(
-            Lithium.fps.minimum,
-            fps
-        )
-
-        Lithium.fps.maximum = math.max(
-            Lithium.fps.maximum,
-            fps
-        )
-
-        local samples = Lithium.fps.samples
-
-        table.insert(samples, fps)
-
-        if #samples > 120 then
-            table.remove(samples, 1)
-        end
-
-        local total = 0
-
-        for _, value in ipairs(samples) do
-            total = total + value
-        end
-
-        Lithium.fps.sampleCount = #samples
-
-        Lithium.fps.average =
-            total / #samples
-    end
-
-    Lithium.stats.sessionTime =
-        getTime() - Lithium.startTime
-
-    Lithium.stats.updates =
-        Lithium.stats.updates + 1
-end
-
--- ============================================
--- FPS UPDATE TIMER
--- ============================================
-
-timer.every(0.25, function()
-    updateFPS()
-end)
-
--- ============================================
--- HUD RENDERING
--- ============================================
-
-local function drawHUD(ctx)
-    if not Lithium.enabled then
-        return
-    end
-
-    if not Lithium.visible then
-        return
-    end
-
-    if not Lithium.config.hud then
-        return
-    end
-
-    local x = Lithium.config.x
-    local y = Lithium.config.y
-
-    local width =
-        Lithium.config.compact and 112 or 164
-
-    local height =
-        Lithium.config.compact and 27 or 94
-
-    if Lithium.config.background then
-        ctx:rect(
-            x, y,
-            width, height,
-            COLORS.background
-        )
-
-        ctx:outline(
-            x, y,
-            width, height,
-            COLORS.border
-        )
-    end
-
-    ctx:text(
-        "LITHIUM",
-        x + 7,
-        y + 5,
-        COLORS.title
-    )
-
-    ctx:text(
-        "v" .. Lithium.VERSION,
-        x + width - 40,
-        y + 5,
-        COLORS.gray
-    )
-
-    if Lithium.config.showFPS then
-        ctx:text(
-            "FPS: " ..
-            formatNumber(Lithium.fps.current),
-            x + 7,
-            y + 20,
-            getFPSColor(Lithium.fps.current)
-        )
-    end
-
-    if Lithium.config.compact then
-        return
-    end
-
-    if Lithium.config.showAverage then
-        ctx:text(
-            "Average: " ..
-            formatNumber(Lithium.fps.average),
-            x + 7,
-            y + 34,
-            COLORS.white
-        )
-    end
-
-    if Lithium.config.showMinimum then
-        ctx:text(
-            "Minimum: " ..
-            formatNumber(Lithium.fps.minimum),
-            x + 7,
-            y + 48,
-            COLORS.gray
-        )
-    end
-
-    if Lithium.config.showMaximum then
-        ctx:text(
-            "Maximum: " ..
-            formatNumber(Lithium.fps.maximum),
-            x + 7,
-            y + 62,
-            COLORS.gray
-        )
-    end
-
-    if Lithium.config.showSession then
-        ctx:text(
-            "Session: " ..
-            util.formatTime(Lithium.stats.sessionTime),
-            x + 7,
-            y + 76,
-            COLORS.cyan
-        )
-    end
-end
-
-hud.add("lithium_hud", drawHUD)
-
--- ============================================
+--------------------------------------------------
 -- SETTINGS
--- ============================================
+--------------------------------------------------
 
-settings.toggle("hud", {
-    label = "Lithium HUD",
-    description = "Show the performance HUD",
+settings.toggle("lithium_enabled", {
+    label = "Enable Lithium",
     default = true
 })
 
-settings.toggle("compact", {
-    label = "Compact HUD",
-    description = "Use a smaller display",
-    default = false
-})
-
-settings.toggle("background", {
-    label = "HUD Background",
-    description = "Show the HUD background",
+settings.toggle("lithium_fpsHud", {
+    label = "Show Lithium FPS HUD",
     default = true
 })
 
-settings.toggle("average", {
-    label = "Average FPS",
-    description = "Display average FPS",
+settings.toggle("lithium_expandedHud", {
+    label = "Expanded Lithium HUD",
     default = true
 })
 
-settings.toggle("minimum", {
-    label = "Minimum FPS",
-    description = "Display minimum FPS",
+settings.toggle("lithium_showBranding", {
+    label = "Show Lithium branding",
     default = true
 })
 
-settings.toggle("maximum", {
-    label = "Maximum FPS",
-    description = "Display maximum FPS",
+settings.toggle("lithium_fpsHistory", {
+    label = "Show FPS history",
     default = true
 })
 
-settings.toggle("session", {
-    label = "Session Timer",
-    description = "Display session duration",
-    default = true
+settings.slider("lithium_targetFPS", {
+    label = "Target FPS",
+    min = 30,
+    max = 260,
+    step = 10,
+    default = 120
 })
 
-settings.toggle("auto", {
-    label = "Automatic Optimization",
-    description = "Adjust supported client settings automatically",
-    default = false
+settings.slider("lithium_renderDistance", {
+    label = "Target render distance",
+    min = 2,
+    max = 32,
+    step = 1,
+    default = 12
 })
 
--- ============================================
--- LOAD SETTINGS
--- ============================================
+--------------------------------------------------
+-- SETTINGS HELPERS
+--------------------------------------------------
 
-local function loadSettings()
-    Lithium.config.hud =
-        settings.get("hud") ~= false
+local function getSetting(key, fallback)
+    local value = nil
 
-    Lithium.config.compact =
-        settings.get("compact") == true
+    pcall(function()
+        value = settings.get("lithium_" .. key)
+    end)
 
-    Lithium.config.background =
-        settings.get("background") ~= false
+    if value == nil then
+        return fallback
+    end
 
-    Lithium.config.showAverage =
-        settings.get("average") ~= false
-
-    Lithium.config.showMinimum =
-        settings.get("minimum") ~= false
-
-    Lithium.config.showMaximum =
-        settings.get("maximum") ~= false
-
-    Lithium.config.showSession =
-        settings.get("session") ~= false
-
-    Lithium.config.autoOptimize =
-        settings.get("auto") == true
+    return value
 end
 
-loadSettings()
+local function isEnabled()
+    return getSetting("enabled", true) == true
+end
 
-settings.onChange(function()
-    loadSettings()
-end)
+--------------------------------------------------
+-- STATE
+--------------------------------------------------
 
--- ============================================
--- PERFORMANCE PRESETS
--- ============================================
+local currentFPS = 0
+local displayedFPS = 0
 
-Lithium.presets = {
-    balanced = {
-        renderDistance = 8,
-        name = "Balanced"
-    },
+local minimumFPS = nil
+local maximumFPS = 0
+local totalFPS = 0
+local sampleCount = 0
 
-    performance = {
-        renderDistance = 6,
-        name = "Performance"
-    },
+local fpsHistory = {}
+local performanceLog = {}
 
-    maximum = {
-        renderDistance = 4,
-        name = "Maximum Performance"
-    },
+local MAX_HISTORY = 48
+local MAX_LOG_ENTRIES = 600
 
-    quality = {
-        renderDistance = 12,
-        name = "Quality"
-    }
+local lastSampleTime = os.clock()
+local adaptiveTimer = 0
+local adaptiveDistance = 12
+
+local autoOptimize = false
+
+--------------------------------------------------
+-- HUD CONFIGURATION
+--------------------------------------------------
+
+local hudConfig = {
+    x = 8,
+    y = 130,
+    width = 190,
+    height = 112,
+    maxFPS = 260,
+    compact = false
 }
 
-function Lithium.applyPreset(name)
-    local preset = Lithium.presets[name]
+--------------------------------------------------
+-- FPS COLORS
+--------------------------------------------------
 
-    if not preset then
-        return false
+local function getFPSColor(fps)
+    if fps >= 66 then
+        return "#3399FF"
+    elseif fps >= 50 then
+        return "#55DD55"
+    elseif fps >= 25 then
+        return "#FFFF00"
+    elseif fps >= 18 then
+        return "#FF8800"
     end
 
+    return "#FF3333"
+end
+
+local function getFPSStatus(fps)
+    if fps >= 66 then
+        return "SMOOTH"
+    elseif fps >= 50 then
+        return "GOOD"
+    elseif fps >= 25 then
+        return "MODERATE"
+    elseif fps >= 18 then
+        return "LOW"
+    end
+
+    return "VERY LOW"
+end
+
+--------------------------------------------------
+-- STATISTICS
+--------------------------------------------------
+
+local function getAverageFPS()
+    if sampleCount <= 0 then
+        return 0
+    end
+
+    return math.floor(totalFPS / sampleCount + 0.5)
+end
+
+local function getMinimumFPS()
+    return minimumFPS or 0
+end
+
+local function getMaximumFPS()
+    return maximumFPS or 0
+end
+
+--------------------------------------------------
+-- HISTORY
+--------------------------------------------------
+
+local function addHistory(fps)
+    table.insert(fpsHistory, fps)
+
+    if #fpsHistory > MAX_HISTORY then
+        table.remove(fpsHistory, 1)
+    end
+end
+
+--------------------------------------------------
+-- PERFORMANCE LOG
+--------------------------------------------------
+
+local function recordFPS()
+    local fps = currentFPS
+
+    minimumFPS = math.min(minimumFPS or fps, fps)
+    maximumFPS = math.max(maximumFPS, fps)
+
+    totalFPS = totalFPS + fps
+    sampleCount = sampleCount + 1
+
+    table.insert(performanceLog, {
+        time = os.date("%Y-%m-%d %H:%M:%S"),
+        fps = fps
+    })
+
+    if #performanceLog > MAX_LOG_ENTRIES then
+        table.remove(performanceLog, 1)
+    end
+
+    addHistory(fps)
+end
+
+--------------------------------------------------
+-- REFRESH STATISTICS
+--------------------------------------------------
+
+local function refreshFPS()
+    currentFPS = getFPS()
+    displayedFPS = currentFPS
+
+    minimumFPS = nil
+    maximumFPS = 0
+    totalFPS = 0
+    sampleCount = 0
+
+    performanceLog = {}
+    fpsHistory = {}
+
+    lastSampleTime = os.clock()
+
+    if inWorld() then
+        recordFPS()
+    end
+
+    printMessage("FPS measurements refreshed.")
+end
+
+--------------------------------------------------
+-- EXPORT PERFORMANCE LOG
+--------------------------------------------------
+
+local function exportPerformanceLog()
+    local lines = {
+        "================================",
+        "          LITHIUM LOG",
+        "================================",
+        "Version: " .. MOD_VERSION,
+        "Date: " .. os.date("%Y-%m-%d %H:%M:%S"),
+        "",
+        "PERFORMANCE STATISTICS",
+        "Current FPS: " .. safeString(currentFPS, "0"),
+        "Minimum FPS: " .. safeString(getMinimumFPS(), "0"),
+        "Average FPS: " .. safeString(getAverageFPS(), "0"),
+        "Maximum FPS: " .. safeString(getMaximumFPS(), "0"),
+        "Samples: " .. safeString(sampleCount, "0"),
+        "",
+        "FPS HISTORY",
+        "--------------------------------"
+    }
+
+    for _, entry in ipairs(performanceLog) do
+        table.insert(
+            lines,
+            safeString(entry.time, "Unknown") ..
+            " | " ..
+            safeString(entry.fps, "0") ..
+            " FPS"
+        )
+    end
+
+    table.insert(lines, "--------------------------------")
+    table.insert(lines, "End of Lithium performance log.")
+
     local ok = pcall(function()
-        game.setOption(
-            "renderDistance",
-            preset.renderDistance
+        files.save(
+            "Lithium-Performance-Log.txt",
+            table.concat(lines, "\n"),
+            "text/plain"
         )
     end)
 
     if ok then
-        Lithium.config.renderDistance =
-            preset.renderDistance
+        printMessage("Performance log exported.")
+    else
+        printMessage("Could not export performance log.")
+    end
+end
 
-        chat.print(
-            "[Lithium] Applied " ..
-            preset.name .. " preset."
+--------------------------------------------------
+-- CLEAR PERFORMANCE LOG
+--------------------------------------------------
+
+local function clearPerformanceLog()
+    performanceLog = {}
+    fpsHistory = {}
+
+    minimumFPS = nil
+    maximumFPS = 0
+    totalFPS = 0
+    sampleCount = 0
+
+    printMessage("Performance log cleared.")
+end
+
+--------------------------------------------------
+-- PERFORMANCE STATUS
+--------------------------------------------------
+
+local function showPerformanceStatus()
+    printMessage("----- Performance -----")
+    printMessage("Current FPS: " .. currentFPS)
+    printMessage("Minimum FPS: " .. getMinimumFPS())
+    printMessage("Average FPS: " .. getAverageFPS())
+    printMessage("Maximum FPS: " .. getMaximumFPS())
+    printMessage("Samples: " .. sampleCount)
+    printMessage("Log entries: " .. #performanceLog)
+    printMessage("-----------------------")
+end
+
+--------------------------------------------------
+-- GAME OPTIONS
+--------------------------------------------------
+
+local function setGameOption(name, value)
+    local ok = pcall(function()
+        game.setOption(name, value)
+    end)
+
+    return ok
+end
+
+--------------------------------------------------
+-- OPTIMIZATION PRESETS
+--------------------------------------------------
+
+local function applyPreset(name)
+    local distance
+    local limit
+
+    if name == "low" then
+        distance = 4
+        limit = 60
+
+    elseif name == "balanced" then
+        distance = 8
+        limit = 120
+
+    elseif name == "high" then
+        distance = 16
+        limit = 260
+
+    elseif name == "custom" then
+        distance = safeNumber(
+            getSetting("renderDistance", 12),
+            12
         )
 
-        return true
+        limit = safeNumber(
+            getSetting("targetFPS", 120),
+            120
+        )
+
+    else
+        printMessage("Unknown optimization preset.")
+        return
     end
 
-    chat.print(
-        "[Lithium] Could not apply preset."
-    )
+    setGameOption("renderDistance", distance)
+    setGameOption("framerateLimit", limit)
 
-    return false
+    adaptiveDistance = distance
+
+    printMessage(name .. " preset applied.")
 end
 
--- ============================================
--- PERFORMANCE REPORT
--- ============================================
+--------------------------------------------------
+-- RESET OPTIMIZATION
+--------------------------------------------------
 
-function Lithium.report()
-    chat.print("========== LITHIUM ==========")
+local function resetOptimizations()
+    setGameOption("renderDistance", 12)
+    setGameOption("framerateLimit", 260)
 
-    chat.print(
-        "Version: " .. Lithium.VERSION
-    )
+    adaptiveDistance = 12
+    autoOptimize = false
 
-    chat.print(
-        "FPS: " ..
-        formatNumber(Lithium.fps.current)
-    )
-
-    chat.print(
-        "Average FPS: " ..
-        formatNumber(Lithium.fps.average)
-    )
-
-    chat.print(
-        "Minimum FPS: " ..
-        formatNumber(Lithium.fps.minimum)
-    )
-
-    chat.print(
-        "Maximum FPS: " ..
-        formatNumber(Lithium.fps.maximum)
-    )
-
-    chat.print(
-        "Render Distance: " ..
-        tostring(safeCall(function()
-            return game.option("renderDistance")
-        end, "Unknown"))
-    )
-
-    chat.print(
-        "Session: " ..
-        util.formatTime(Lithium.stats.sessionTime)
-    )
-
-    chat.print(
-        "Frames tracked: " ..
-        formatNumber(Lithium.stats.frames)
-    )
-
-    chat.print("=============================")
+    printMessage("Optimization settings reset.")
 end
 
--- ============================================
--- COMMANDS
--- ============================================
+--------------------------------------------------
+-- ADAPTIVE RENDER DISTANCE
+--------------------------------------------------
 
-commands.register(
-    "lithium",
-    function(args, raw)
+local function updateAdaptiveRenderDistance()
+    if not inWorld() then
+        return
+    end
 
-        local subcommand = args[1] or "help"
+    local newDistance = adaptiveDistance
 
-        if subcommand == "help" then
+    if currentFPS < 25 then
+        newDistance = math.max(2, adaptiveDistance - 2)
 
-            chat.print("===== LITHIUM 0.1.1 =====")
-            chat.print("/lithium")
-            chat.print("/lithium help")
-            chat.print("/lithium stats")
-            chat.print("/lithium hud")
-            chat.print("/lithium hide")
-            chat.print("/lithium show")
-            chat.print("/lithium enable")
-            chat.print("/lithium disable")
-            chat.print("/lithium settings")
-            chat.print("/lithium balanced")
-            chat.print("/lithium performance")
-            chat.print("/lithium maximum")
-            chat.print("/lithium quality")
-            chat.print("/lithium reset")
-            chat.print("=========================")
+    elseif currentFPS < 40 then
+        newDistance = math.max(2, adaptiveDistance - 1)
 
-        elseif subcommand == "stats" then
+    elseif currentFPS >= 90 then
+        newDistance = math.min(32, adaptiveDistance + 1)
+    end
 
-            Lithium.report()
+    if newDistance ~= adaptiveDistance then
+        adaptiveDistance = newDistance
 
-        elseif subcommand == "hud" then
+        setGameOption("renderDistance", newDistance)
+    end
+end
 
-            Lithium.config.hud =
-                not Lithium.config.hud
-
-            settings.set(
-                "hud",
-                Lithium.config.hud
-            )
-
-            chat.print(
-                "HUD: " ..
-                tostring(Lithium.config.hud)
-            )
-
-        elseif subcommand == "hide" then
-
-            Lithium.visible = false
-            chat.print("HUD hidden.")
-
-        elseif subcommand == "show" then
-
-            Lithium.visible = true
-            chat.print("HUD visible.")
-
-        elseif subcommand == "enable" then
-
-            Lithium.enabled = true
-            chat.print("Lithium enabled.")
-
-        elseif subcommand == "disable" then
-
-            Lithium.enabled = false
-            chat.print("Lithium disabled.")
-
-        elseif subcommand == "settings" then
-
-            settings.open()
-
-        elseif subcommand == "balanced" then
-
-            Lithium.applyPreset("balanced")
-
-        elseif subcommand == "performance" then
-
-            Lithium.applyPreset("performance")
-
-        elseif subcommand == "maximum" then
-
-            Lithium.applyPreset("maximum")
-
-        elseif subcommand == "quality" then
-
-            Lithium.applyPreset("quality")
-
-        elseif subcommand == "reset" then
-
-            Lithium.fps.minimum = 9999
-            Lithium.fps.maximum = 0
-            Lithium.fps.average = 0
-            Lithium.fps.samples = {}
-            Lithium.fps.sampleCount = 0
-
-            Lithium.stats.frames = 0
-            Lithium.stats.updates = 0
-
-            Lithium.startTime = getTime()
-
-            chat.print(
-                "Lithium statistics reset."
-            )
-
-        else
-
-            chat.print(
-                "Unknown command. Use /lithium help"
-            )
-
-        end
-    end,
-    "Lithium performance commands"
-)
-
--- ============================================
+--------------------------------------------------
 -- AUTOMATIC OPTIMIZATION
--- ============================================
+--------------------------------------------------
 
-timer.every(5, function()
-
-    if not Lithium.enabled then
+local function updateAutomaticOptimization()
+    if not autoOptimize then
         return
     end
 
-    if not Lithium.config.autoOptimize then
+    if currentFPS < 25 then
+        setGameOption("renderDistance", 4)
+
+    elseif currentFPS < 40 then
+        setGameOption("renderDistance", 6)
+
+    elseif currentFPS < 60 then
+        setGameOption("renderDistance", 8)
+
+    elseif currentFPS >= 100 then
+        setGameOption("renderDistance", 12)
+    end
+end
+
+--------------------------------------------------
+-- HUD DRAWING
+--------------------------------------------------
+
+local function drawPanel(ctx, x, y, width, height)
+    ctx:rect(
+        x + 2,
+        y + 3,
+        width,
+        height,
+        "#70000000"
+    )
+
+    ctx:gradient(
+        x,
+        y,
+        x + width,
+        y + height,
+        "#F0192435",
+        "#E90B1220"
+    )
+
+    ctx:outline(
+        x,
+        y,
+        width,
+        height,
+        "#526783"
+    )
+
+    ctx:rect(
+        x + 1,
+        y + 1,
+        width - 2,
+        1,
+        "#806FA6D8"
+    )
+end
+
+--------------------------------------------------
+-- FPS BAR
+--------------------------------------------------
+
+local function drawFPSBar(ctx, x, y, width, height)
+    local ratio = math.min(
+        1,
+        math.max(0, displayedFPS / hudConfig.maxFPS)
+    )
+
+    local fillWidth = math.floor(width * ratio)
+
+    ctx:rect(
+        x,
+        y,
+        width,
+        height,
+        "#FF111827"
+    )
+
+    if fillWidth > 0 then
+        ctx:gradient(
+            x,
+            y,
+            x + fillWidth,
+            y + height,
+            getFPSColor(currentFPS),
+            getFPSColor(currentFPS)
+        )
+    end
+
+    ctx:outline(
+        x,
+        y,
+        width,
+        height,
+        "#FF64748B"
+    )
+end
+
+--------------------------------------------------
+-- FPS HISTORY GRAPH
+--------------------------------------------------
+
+local function drawHistoryGraph(ctx, x, y, width, height)
+    ctx:rect(
+        x,
+        y,
+        width,
+        height,
+        "#70101827"
+    )
+
+    ctx:outline(
+        x,
+        y,
+        width,
+        height,
+        "#40516A"
+    )
+
+    if #fpsHistory < 2 then
+        ctx:text(
+            "Collecting FPS history...",
+            x + 5,
+            y + 5,
+            "#94A3B8"
+        )
+
         return
     end
 
-    if not game.inWorld() then
+    local previousX = nil
+    local previousY = nil
+
+    for i, fps in ipairs(fpsHistory) do
+        local graphX =
+            x + ((i - 1) / math.max(1, MAX_HISTORY - 1)) * width
+
+        local normalized =
+            math.min(1, math.max(0, fps / hudConfig.maxFPS))
+
+        local graphY =
+            y + height - (normalized * (height - 4)) - 2
+
+        if previousX ~= nil then
+            ctx:line(
+                previousX,
+                previousY,
+                graphX,
+                graphY,
+                getFPSColor(fps),
+                2
+            )
+        end
+
+        previousX = graphX
+        previousY = graphY
+    end
+end
+
+--------------------------------------------------
+-- STATISTICS HUD
+--------------------------------------------------
+
+local function drawStat(ctx, label, value, x, y, color)
+    ctx:text(
+        safeString(label, ""),
+        x,
+        y,
+        "#91A3BA"
+    )
+
+    ctx:text(
+        safeString(value, "0"),
+        x,
+        y + 11,
+        color
+    )
+end
+
+--------------------------------------------------
+-- MAIN HUD
+--------------------------------------------------
+
+hud.add("lithium_main_hud", function(ctx)
+    if not isEnabled() then
         return
     end
 
-    local fps = Lithium.fps.current
+    if not inWorld() then
+        return
+    end
 
-    if fps > 0 and fps < 30 then
+    if not getSetting("fpsHud", true) then
+        return
+    end
 
-        local distance = safeCall(function()
-            return game.option("renderDistance")
-        end, nil)
+    local x = hudConfig.x
+    local y = hudConfig.y
+    local width = hudConfig.width
 
-        if distance and distance > 4 then
+    local color = getFPSColor(currentFPS)
 
-            pcall(function()
-                game.setOption(
-                    "renderDistance",
-                    math.max(4, distance - 2)
-                )
-            end)
+    if hudConfig.compact or
+       not getSetting("expandedHud", true) then
 
+        drawPanel(ctx, x, y, width, 34)
+
+        if getSetting("showBranding", true) then
+            ctx:text(
+                "LITHIUM",
+                x + 8,
+                y + 6,
+                "#FFFFFF"
+            )
+        end
+
+        ctx:text(
+            tostring(currentFPS) .. " FPS",
+            x + 90,
+            y + 6,
+            color
+        )
+
+        return
+    end
+
+    drawPanel(ctx, x, y, width, 112)
+
+    if getSetting("showBranding", true) then
+        ctx:text(
+            "LITHIUM",
+            x + 9,
+            y + 7,
+            "#FFFFFF"
+        )
+
+        ctx:text(
+            "PERFORMANCE",
+            x + 73,
+            y + 7,
+            "#8EA4C1"
+        )
+    end
+
+    ctx:circle(
+        x + width - 12,
+        y + 11,
+        3,
+        "#55DD55"
+    )
+
+    ctx:text(
+        tostring(currentFPS),
+        x + 9,
+        y + 23,
+        color
+    )
+
+    ctx:text(
+        "FPS",
+        x + 49,
+        y + 29,
+        "#B7C7D9"
+    )
+
+    ctx:text(
+        getFPSStatus(currentFPS),
+        x + width - 64,
+        y + 29,
+        color
+    )
+
+    drawFPSBar(
+        ctx,
+        x + 9,
+        y + 44,
+        width - 18,
+        9
+    )
+
+    drawStat(
+        ctx,
+        "MIN",
+        getMinimumFPS(),
+        x + 10,
+        y + 61,
+        "#FF8800"
+    )
+
+    drawStat(
+        ctx,
+        "AVG",
+        getAverageFPS(),
+        x + 69,
+        y + 61,
+        "#55DD55"
+    )
+
+    drawStat(
+        ctx,
+        "MAX",
+        getMaximumFPS(),
+        x + 130,
+        y + 61,
+        "#3399FF"
+    )
+
+    if getSetting("fpsHistory", true) then
+        drawHistoryGraph(
+            ctx,
+            x + 9,
+            y + 86,
+            width - 18,
+            17
+        )
+    end
+end)
+
+--------------------------------------------------
+-- FRAME EVENT
+--------------------------------------------------
+
+on("frame", function(dt)
+    if not isEnabled() or not inWorld() then
+        return
+    end
+
+    currentFPS = getFPS()
+
+    local delta = math.max(
+        0,
+        math.min(safeNumber(dt, 0.05), 0.25)
+    )
+
+    local smoothing = math.min(1, delta * 10)
+
+    displayedFPS =
+        displayedFPS +
+        (currentFPS - displayedFPS) * smoothing
+end)
+
+--------------------------------------------------
+-- TICK EVENT
+--------------------------------------------------
+
+on("tick", function()
+    if not isEnabled() or not inWorld() then
+        return
+    end
+
+    local now = os.clock()
+
+    if now - lastSampleTime >= 1 then
+        lastSampleTime = now
+
+        recordFPS()
+        updateAutomaticOptimization()
+    end
+
+    adaptiveTimer = adaptiveTimer + 1
+
+    if adaptiveTimer >= 40 then
+        adaptiveTimer = 0
+
+        if getSetting("adaptiveRenderDistance", false) then
+            updateAdaptiveRenderDistance()
         end
     end
 end)
 
--- ============================================
--- RESET FUNCTION
--- ============================================
+--------------------------------------------------
+-- COMMAND HELP
+--------------------------------------------------
 
-function Lithium.reset()
-    Lithium.fps.current = 0
-    Lithium.fps.minimum = 9999
-    Lithium.fps.maximum = 0
-    Lithium.fps.average = 0
-    Lithium.fps.samples = {}
-    Lithium.fps.sampleCount = 0
-
-    Lithium.stats.frames = 0
-    Lithium.stats.updates = 0
-
-    Lithium.startTime = getTime()
-
-    chat.print("[Lithium] Statistics reset.")
+local function showHelp()
+    printMessage("===== LITHIUM COMMANDS =====")
+    printMessage("/lithium_status help")
+    printMessage("/lithium_status version")
+    printMessage("/lithium_status performance")
+    printMessage("/lithium_status log")
+    printMessage("/lithium_status clear")
+    printMessage("/lithium_status refresh")
+    printMessage("/lithium_status optimize low|balanced|high|custom")
+    printMessage("/lithium_status optimize reset")
+    printMessage("/lithium_status auto on|off")
+    printMessage("/lithium_status hud compact|expanded")
+    printMessage("/lithium_status hud on|off")
+    printMessage("============================")
 end
 
--- ============================================
--- STARTUP
--- ============================================
+--------------------------------------------------
+-- COMMAND DISPATCHER
+--------------------------------------------------
 
-chat.print(
-    "b[Lithium] aLithium 0.1.1 loaded!"
+local function normalize(value)
+    if value == nil then
+        return ""
+    end
+
+    return tostring(value)
+        :lower()
+        :match("^%s*(.-)%s*$")
+end
+
+commands.register(
+    "lithium_status",
+    function(args)
+        args = args or {}
+
+        local category = normalize(args[1])
+        local action = normalize(args[2])
+
+        if category == "" or category == "help" then
+            showHelp()
+            return
+        end
+
+        if category == "version" then
+            printMessage("Version " .. MOD_VERSION)
+            return
+        end
+
+        if category == "performance" then
+            showPerformanceStatus()
+            return
+        end
+
+        if category == "log" then
+            exportPerformanceLog()
+            return
+        end
+
+        if category == "clear" then
+            clearPerformanceLog()
+            return
+        end
+
+        if category == "refresh" then
+            refreshFPS()
+            return
+        end
+
+        if category == "auto" then
+            if action == "on" then
+                autoOptimize = true
+                printMessage("Automatic optimization enabled.")
+
+            elseif action == "off" then
+                autoOptimize = false
+                printMessage("Automatic optimization disabled.")
+
+            else
+                printMessage("Usage: /lithium_status auto on|off")
+            end
+
+            return
+        end
+
+        if category == "optimize" then
+            if action == "reset" then
+                resetOptimizations()
+            else
+                applyPreset(action)
+            end
+
+            return
+        end
+
+        if category == "hud" then
+            if action == "compact" then
+                hudConfig.compact = true
+                printMessage("Compact HUD enabled.")
+
+            elseif action == "expanded" then
+                hudConfig.compact = false
+                printMessage("Expanded HUD enabled.")
+
+            elseif action == "on" then
+                settings.set("lithium_fpsHud", true)
+                printMessage("HUD enabled.")
+
+            elseif action == "off" then
+                settings.set("lithium_fpsHud", false)
+                printMessage("HUD disabled.")
+
+            else
+                printMessage("Usage: /lithium_status hud compact|expanded|on|off")
+            end
+
+            return
+        end
+
+        printMessage("Unknown command: " .. category)
+        printMessage("Use /lithium_status help")
+    end,
+    "Lithium performance commands"
 )
 
-chat.print(
-    "7" .. Lithium.DESCRIPTION
-)
+--------------------------------------------------
+-- SETTINGS CHANGES
+--------------------------------------------------
 
-chat.print(
-    "7Type /lithium help for commands."
-)
+settings.onChange(function(key, value)
+    if key == "lithium_renderDistance" then
+        adaptiveDistance = safeNumber(value, 12)
+    end
 
-mod.log(
-    "Lithium 0.1.1 initialized."
-)
+    if key == "lithium_enabled" then
+        printMessage(
+            value and "Enabled." or "Disabled."
+        )
+    end
+end)
 
--- ============================================
+--------------------------------------------------
 -- EXPORT
--- ============================================
+--------------------------------------------------
 
-mod.export = Lithium
+mod.export = {
+    name = MOD_NAME,
+    version = MOD_VERSION,
+
+    getFPS = function()
+        return currentFPS
+    end,
+
+    getAverageFPS = function()
+        return getAverageFPS()
+    end,
+
+    getMinimumFPS = function()
+        return getMinimumFPS()
+    end,
+
+    getMaximumFPS = function()
+        return getMaximumFPS()
+    end,
+
+    refreshFPS = function()
+        refreshFPS()
+    end
+}
+
+--------------------------------------------------
+-- INITIALIZATION
+--------------------------------------------------
+
+adaptiveDistance = safeNumber(
+    getSetting("renderDistance", 12),
+    12
+)
+
+if inWorld() then
+    currentFPS = getFPS()
+    displayedFPS = currentFPS
+end
+
+lastSampleTime = os.clock()
+
+printMessage("v" .. MOD_VERSION .. " loaded.")
+printMessage("Command: /lithium_status")
+printMessage("Type /lithium_status help")
