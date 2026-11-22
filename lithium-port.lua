@@ -1,16 +1,16 @@
 
 -- name: Lithium
 -- id: lithium
--- version: 0.1.2
+-- version: 0.1.3
 -- author: UserArham
--- description: Lightweight performance monitoring and optimization for Eaglercraft
+-- description: FPS monitoring, TPS display and performance optimization for Eaglercraft
 
 --------------------------------------------------
--- LITHIUM 0.1.2
+-- LITHIUM v0.1.3
 --------------------------------------------------
 
 local MOD_NAME = "Lithium"
-local MOD_VERSION = "0.1.2"
+local MOD_VERSION = "0.1.3"
 
 --------------------------------------------------
 -- SAFE HELPERS
@@ -70,7 +70,12 @@ settings.toggle("lithium_enabled", {
 })
 
 settings.toggle("lithium_fpsHud", {
-    label = "Show Lithium FPS HUD",
+    label = "Show FPS counter",
+    default = true
+})
+
+settings.toggle("lithium_tpsHud", {
+    label = "Show TPS bar",
     default = true
 })
 
@@ -134,6 +139,9 @@ end
 local currentFPS = 0
 local displayedFPS = 0
 
+local currentTPS = nil
+local displayedTPS = 0
+
 local minimumFPS = nil
 local maximumFPS = 0
 local totalFPS = 0
@@ -161,8 +169,55 @@ local hudConfig = {
     width = 190,
     height = 112,
     maxFPS = 260,
+    maxTPS = 20,
     compact = false
 }
+
+--------------------------------------------------
+-- TPS PROVIDER
+--------------------------------------------------
+
+-- Replace this function with the verified Zeus API
+-- TPS accessor when available.
+--
+-- Do not substitute FPS for TPS:
+-- they measure different things.
+
+local function getTPS()
+    return nil
+end
+
+--------------------------------------------------
+-- TPS COLORS
+--------------------------------------------------
+
+local function getTPSColor(tps)
+    if tps == nil then
+        return "#94A3B8"
+    elseif tps >= 18 then
+        return "#3399FF"
+    elseif tps >= 15 then
+        return "#FFFF00"
+    elseif tps >= 10 then
+        return "#FF8800"
+    else
+        return "#FF3333"
+    end
+end
+
+local function getTPSStatus(tps)
+    if tps == nil then
+        return "UNAVAILABLE"
+    elseif tps >= 18 then
+        return "STABLE"
+    elseif tps >= 15 then
+        return "MODERATE"
+    elseif tps >= 10 then
+        return "LOW"
+    else
+        return "VERY LOW"
+    end
+end
 
 --------------------------------------------------
 -- FPS COLORS
@@ -217,7 +272,7 @@ local function getMaximumFPS()
 end
 
 --------------------------------------------------
--- HISTORY
+-- FPS HISTORY
 --------------------------------------------------
 
 local function addHistory(fps)
@@ -243,7 +298,8 @@ local function recordFPS()
 
     table.insert(performanceLog, {
         time = os.date("%Y-%m-%d %H:%M:%S"),
-        fps = fps
+        fps = fps,
+        tps = currentTPS
     })
 
     if #performanceLog > MAX_LOG_ENTRIES then
@@ -260,6 +316,7 @@ end
 local function refreshFPS()
     currentFPS = getFPS()
     displayedFPS = currentFPS
+    currentTPS = getTPS()
 
     minimumFPS = nil
     maximumFPS = 0
@@ -275,7 +332,7 @@ local function refreshFPS()
         recordFPS()
     end
 
-    printMessage("FPS measurements refreshed.")
+    printMessage("Measurements refreshed.")
 end
 
 --------------------------------------------------
@@ -292,6 +349,7 @@ local function exportPerformanceLog()
         "",
         "PERFORMANCE STATISTICS",
         "Current FPS: " .. safeString(currentFPS, "0"),
+        "Current TPS: " .. safeString(currentTPS, "Unavailable"),
         "Minimum FPS: " .. safeString(getMinimumFPS(), "0"),
         "Average FPS: " .. safeString(getAverageFPS(), "0"),
         "Maximum FPS: " .. safeString(getMaximumFPS(), "0"),
@@ -307,7 +365,9 @@ local function exportPerformanceLog()
             safeString(entry.time, "Unknown") ..
             " | " ..
             safeString(entry.fps, "0") ..
-            " FPS"
+            " FPS | " ..
+            safeString(entry.tps, "Unavailable") ..
+            " TPS"
         )
     end
 
@@ -352,6 +412,7 @@ end
 local function showPerformanceStatus()
     printMessage("----- Performance -----")
     printMessage("Current FPS: " .. currentFPS)
+    printMessage("Current TPS: " .. safeString(currentTPS, "Unavailable"))
     printMessage("Minimum FPS: " .. getMinimumFPS())
     printMessage("Average FPS: " .. getAverageFPS())
     printMessage("Maximum FPS: " .. getMaximumFPS())
@@ -365,11 +426,9 @@ end
 --------------------------------------------------
 
 local function setGameOption(name, value)
-    local ok = pcall(function()
+    return pcall(function()
         game.setOption(name, value)
     end)
-
-    return ok
 end
 
 --------------------------------------------------
@@ -435,10 +494,6 @@ end
 --------------------------------------------------
 
 local function updateAdaptiveRenderDistance()
-    if not inWorld() then
-        return
-    end
-
     local newDistance = adaptiveDistance
 
     if currentFPS < 25 then
@@ -453,7 +508,6 @@ local function updateAdaptiveRenderDistance()
 
     if newDistance ~= adaptiveDistance then
         adaptiveDistance = newDistance
-
         setGameOption("renderDistance", newDistance)
     end
 end
@@ -482,7 +536,7 @@ local function updateAutomaticOptimization()
 end
 
 --------------------------------------------------
--- HUD DRAWING
+-- HUD PANEL
 --------------------------------------------------
 
 local function drawPanel(ctx, x, y, width, height)
@@ -521,16 +575,12 @@ local function drawPanel(ctx, x, y, width, height)
 end
 
 --------------------------------------------------
--- FPS BAR
+-- TPS BAR
 --------------------------------------------------
 
-local function drawFPSBar(ctx, x, y, width, height)
-    local ratio = math.min(
-        1,
-        math.max(0, displayedFPS / hudConfig.maxFPS)
-    )
-
-    local fillWidth = math.floor(width * ratio)
+local function drawTPSBar(ctx, x, y, width, height)
+    local tps = currentTPS
+    local color = getTPSColor(tps)
 
     ctx:rect(
         x,
@@ -540,15 +590,24 @@ local function drawFPSBar(ctx, x, y, width, height)
         "#FF111827"
     )
 
-    if fillWidth > 0 then
-        ctx:gradient(
-            x,
-            y,
-            x + fillWidth,
-            y + height,
-            getFPSColor(currentFPS),
-            getFPSColor(currentFPS)
+    if tps ~= nil then
+        local ratio = math.min(
+            1,
+            math.max(0, tps / hudConfig.maxTPS)
         )
+
+        local fillWidth = math.floor(width * ratio)
+
+        if fillWidth > 0 then
+            ctx:gradient(
+                x,
+                y,
+                x + fillWidth,
+                y + height,
+                color,
+                color
+            )
+        end
     end
 
     ctx:outline(
@@ -646,15 +705,7 @@ end
 --------------------------------------------------
 
 hud.add("lithium_main_hud", function(ctx)
-    if not isEnabled() then
-        return
-    end
-
-    if not inWorld() then
-        return
-    end
-
-    if not getSetting("fpsHud", true) then
+    if not isEnabled() or not inWorld() then
         return
     end
 
@@ -667,23 +718,29 @@ hud.add("lithium_main_hud", function(ctx)
     if hudConfig.compact or
        not getSetting("expandedHud", true) then
 
-        drawPanel(ctx, x, y, width, 34)
+        drawPanel(ctx, x, y, width, 42)
 
         if getSetting("showBranding", true) then
             ctx:text(
                 "LITHIUM",
                 x + 8,
-                y + 6,
+                y + 5,
                 "#FFFFFF"
             )
         end
 
-        ctx:text(
-            tostring(currentFPS) .. " FPS",
-            x + 90,
-            y + 6,
-            color
-        )
+        if getSetting("fpsHud", true) then
+            ctx:text(
+                tostring(currentFPS) .. " FPS",
+                x + 90,
+                y + 5,
+                color
+            )
+        end
+
+        if getSetting("tpsHud", true) then
+            drawTPSBar(ctx, x, y + 25, width - 16, 7)
+        end
 
         return
     end
@@ -713,41 +770,61 @@ hud.add("lithium_main_hud", function(ctx)
         "#55DD55"
     )
 
-    ctx:text(
-        tostring(currentFPS),
-        x + 9,
-        y + 23,
-        color
-    )
+    if getSetting("fpsHud", true) then
+        ctx:text(
+            tostring(currentFPS),
+            x + 9,
+            y + 23,
+            color
+        )
 
-    ctx:text(
-        "FPS",
-        x + 49,
-        y + 29,
-        "#B7C7D9"
-    )
+        ctx:text(
+            "FPS",
+            x + 49,
+            y + 29,
+            "#B7C7D9"
+        )
 
-    ctx:text(
-        getFPSStatus(currentFPS),
-        x + width - 64,
-        y + 29,
-        color
-    )
+        ctx:text(
+            getFPSStatus(currentFPS),
+            x + width - 64,
+            y + 29,
+            color
+        )
+    end
 
-    drawFPSBar(
-        ctx,
-        x + 9,
-        y + 44,
-        width - 18,
-        9
-    )
+    -- TPS label and bar on the LEFT side.
+    if getSetting("tpsHud", true) then
+        ctx:text(
+            "TPS",
+            x + 9,
+            y + 43,
+            "#B7C7D9"
+        )
+
+        ctx:text(
+            currentTPS == nil and "--" or
+            string.format("%.1f", currentTPS),
+            x + 42,
+            y + 43,
+            getTPSColor(currentTPS)
+        )
+
+        drawTPSBar(
+            ctx,
+            x + 9,
+            y + 57,
+            width - 18,
+            8
+        )
+    end
 
     drawStat(
         ctx,
         "MIN",
         getMinimumFPS(),
         x + 10,
-        y + 61,
+        y + 70,
         "#FF8800"
     )
 
@@ -756,7 +833,7 @@ hud.add("lithium_main_hud", function(ctx)
         "AVG",
         getAverageFPS(),
         x + 69,
-        y + 61,
+        y + 70,
         "#55DD55"
     )
 
@@ -765,7 +842,7 @@ hud.add("lithium_main_hud", function(ctx)
         "MAX",
         getMaximumFPS(),
         x + 130,
-        y + 61,
+        y + 70,
         "#3399FF"
     )
 
@@ -773,9 +850,9 @@ hud.add("lithium_main_hud", function(ctx)
         drawHistoryGraph(
             ctx,
             x + 9,
-            y + 86,
+            y + 94,
             width - 18,
-            17
+            12
         )
     end
 end)
@@ -791,6 +868,15 @@ on("frame", function(dt)
 
     currentFPS = getFPS()
 
+    local tps = getTPS()
+
+    if tps ~= nil then
+        currentTPS = math.max(
+            0,
+            math.min(hudConfig.maxTPS, safeNumber(tps, 0))
+        )
+    end
+
     local delta = math.max(
         0,
         math.min(safeNumber(dt, 0.05), 0.25)
@@ -801,6 +887,12 @@ on("frame", function(dt)
     displayedFPS =
         displayedFPS +
         (currentFPS - displayedFPS) * smoothing
+
+    if currentTPS ~= nil then
+        displayedTPS =
+            displayedTPS +
+            (currentTPS - displayedTPS) * smoothing
+    end
 end)
 
 --------------------------------------------------
@@ -836,6 +928,16 @@ end)
 -- COMMAND HELP
 --------------------------------------------------
 
+local function normalize(value)
+    if value == nil then
+        return ""
+    end
+
+    return tostring(value)
+        :lower()
+        :match("^%s*(.-)%s*$")
+end
+
 local function showHelp()
     printMessage("===== LITHIUM COMMANDS =====")
     printMessage("/lithium_status help")
@@ -855,16 +957,6 @@ end
 --------------------------------------------------
 -- COMMAND DISPATCHER
 --------------------------------------------------
-
-local function normalize(value)
-    if value == nil then
-        return ""
-    end
-
-    return tostring(value)
-        :lower()
-        :match("^%s*(.-)%s*$")
-end
 
 commands.register(
     "lithium_status",
@@ -941,10 +1033,12 @@ commands.register(
 
             elseif action == "on" then
                 settings.set("lithium_fpsHud", true)
+                settings.set("lithium_tpsHud", true)
                 printMessage("HUD enabled.")
 
             elseif action == "off" then
                 settings.set("lithium_fpsHud", false)
+                settings.set("lithium_tpsHud", false)
                 printMessage("HUD disabled.")
 
             else
@@ -988,6 +1082,10 @@ mod.export = {
         return currentFPS
     end,
 
+    getTPS = function()
+        return currentTPS
+    end,
+
     getAverageFPS = function()
         return getAverageFPS()
     end,
@@ -1017,10 +1115,12 @@ adaptiveDistance = safeNumber(
 if inWorld() then
     currentFPS = getFPS()
     displayedFPS = currentFPS
+    currentTPS = getTPS()
 end
 
 lastSampleTime = os.clock()
 
 printMessage("v" .. MOD_VERSION .. " loaded.")
+printMessage("TPS bar: left side.")
 printMessage("Command: /lithium_status")
 printMessage("Type /lithium_status help")
