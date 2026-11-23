@@ -924,6 +924,47 @@ on("tick", function()
     end
 end)
 
+-- ============================================
+-- RESET FUNCTION
+-- ============================================
+
+function Lithium.reset()
+    Lithium.fps.current = 0
+    Lithium.fps.minimum = 9999
+    Lithium.fps.maximum = 0
+    Lithium.fps.average = 0
+    Lithium.fps.samples = {}
+    Lithium.fps.sampleCount = 0
+
+    Lithium.stats.frames = 0
+    Lithium.stats.updates = 0
+
+    Lithium.startTime = getTime()
+
+    chat.print("[Lithium] Statistics reset.")
+end
+
+-- ============================================
+-- STARTUP
+-- ============================================
+
+chat.print(
+    "§b[Lithium] §aLithium 0.1.1 loaded!"
+)
+
+chat.print(
+    "§7Type /lithium help for commands."
+)
+
+mod.log(
+    "Lithium 0.1.1 initialized."
+)
+
+-- ============================================
+-- EXPORT
+-- ============================================
+
+mod.export = Lithium
 --------------------------------------------------
 -- COMMAND HELP
 --------------------------------------------------
